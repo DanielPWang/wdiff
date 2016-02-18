@@ -64,7 +64,7 @@ func (sm *SequenceMatcher) chain_b() {
 	for i, e := range b {
 		indices, ok := b2j[e]
 		if ok {
-			b2j[e] = append(indices, int(i))
+			b2j[e] = append(indices, int(i)) // TODO: 此处处理相近情况？
 		} else {
 			b2j[e] = []int{int(i)}
 		}
@@ -85,7 +85,7 @@ func (sm *SequenceMatcher) TopN(n int) {
 func (sm *SequenceMatcher) find_longest_match(alo, ahi, blo, bhi int) (apos, bpos, size int) {
 	apos, bpos, size = alo, blo, 0
 	var j2len = make(map[Valuer]int)
-	var nothing = make([]int, 12)
+	var nothing = make([]int)
 	for i := alo; i < ahi; i++ {
 		var newj2len = make(map[Valuer]int, 10)
 		for j := range sm.b2j[sm.A[i]] {
