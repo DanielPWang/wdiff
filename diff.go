@@ -5,6 +5,24 @@ import (
 	"log"
 	"os"
 	"strings"
+	"math"
+)
+
+// float：2^23 = 8388608，一共七位，这意味着最多能有7位有效数字，但绝对能保证的为6位，也即float的精度为6~7位有效数字；
+// double：2^52 = 4503599627370496，一共16位，同理，double的精度为15~16位。
+
+type ValueType float32
+
+const (
+	IGNORE = iota
+	LEFT
+	LEFT_TOP
+	TOP
+	RIGHT_TOP
+	RIGHT
+	RIGHT_BOTTOM
+	BOTTOM
+	LEFT_BOTTOM
 )
 
 var logger = log.New(os.Stdout, "[CORE]", log.LstdFlags|log.Lshortfile) //log.Logger
@@ -14,19 +32,14 @@ func init() {
 	// logger.Print("Hello world.")
 }
 
-func Display() {
-	fmt.Println("dir test")
-}
-
 // 根据相同元素个数判断
 func default_calculate_ratio(matches, length int) float32 {
 	return 2.0 * float32(matches) / float32(length)
 }
 
 type Valuer interface {
-	GetValue(string) int
-	// -int.Max
-	Distance(Valuer) int
+	GetValue(string) float32
+	GetShow(string) string
 }
 
 //type Differ interface {}
@@ -36,81 +49,74 @@ var Calculate_ratio = default_calculate_ratio
 func isLinejunk(s string) bool {
 	return len(strings.TrimSpace(s)) == 0
 }
-
-type SequenceMatcher struct {
-	IsJunk          func(Valuer) bool
-	A               []Valuer
-	B               []Valuer
-	matching_blocks []int
-	opcodes         []int
-	fullbcount      int
-	b2j             map[Valuer][]int
-	bjunk           map[Valuer]int
+bool Default_IsClose(l, r Valuer) {
+	return math.Abs(l.GetValue("")-r.GetValue("")) < 0.0001
 }
 
-func (sm *SequenceMatcher) New(a, b []Valuer, isJunk func(Valuer) bool) {
+type LCS_Math struct {
+	IsClose func(l, r Valuer) bool
+	A       []Valuer
+	B       []Valuer
+	b2j     [][]int
+	direct  [][]int
+}
+
+func (sm *LCS_Math) New(a, b []Valuer, isClose func (l,r Value) bool) {
+	// TODO: check len(a) len(b), maybe too bigger
 	sm.A = a
 	sm.B = b
-	if isJunk == nil {
-		sm.IsJunk = func(Valuer) bool { return false }
-	} else {
-		sm.IsJunk = isJunk
+	
+	if isClose == nil {
+		sm.IsClose = isClose
 	}
-	sm.b2j = make(map[Valuer][]int, 128)
-}
-func (sm *SequenceMatcher) chain_b() {
-	var b = sm.B
-	var b2j = sm.b2j
-	for i, e := range b {
-		indices, ok := b2j[e]
-		if ok {
-			b2j[e] = append(indices, int(i)) // TODO: 此处处理相近情况？
-		} else {
-			b2j[e] = []int{int(i)}
-		}
+	
+	sm.b2j = make([][]int, len(b)+1) // [b][a]
+	for i := range sm.b2j {
+		sm.b2j[i] = make([]int, len(a)+1)
 	}
-	for k, _ := range sm.b2j {
-		if sm.IsJunk(k) {
-			sm.bjunk[k] = 1
-		}
-	}
-	for k, _ := range sm.bjunk {
-		delete(sm.b2j, k)
+	sm.direct = make([][]int, len(b)+1) // [b][a]
+	for i := range sm.direct {
+		sm.direct[i] = make([]int, len(a)+1)
 	}
 }
-func (sm *SequenceMatcher) TopN(n int) {
+func (sm *LCS_Math) Calculate() {
+	for i := 1; i < len(a)+1; i++ {
+		for j := 1; j < len(b)+1; j++ {
+			// TODO:
+			if sm.IsClose(sm.A[i-1], sm.B[j-1]) {
+				sm.b2j[i][j] = sm.b2j[i-1][j-1]+1
+				sm.direct[i][j] = LEFT_TOP
+			} else if sm.b2j[i-1][j]>= sm.b2j[i][j-1] {
+				sm.b2j[i][j] = sm.b2j[i-1][j]
+				sm.direct[i][j] = LEFT
+			} else {
+				sm.b2j[i][j] = sm.b2j[i][j-1]
+				sm.direct[i][j] = TOP
+			}
+		}
+	}
+}
 
+func (sm *LCS_Math) PrintLCS(a []Valuer, i, j int) {
+	if i==0 || j==0 { return }
+	switch sm.direct[i][j] {
+		case LEFT_TOP: {
+			sm.PrintLCS(sm.A, i-1, j-1)
+			fmt.Printf("%s ", a[i-1].GetShow())
+		}
+		case TOP: sm.PrintLCS(sm.A, i, j-1)
+		case LEFT:sm.PrintLCS(sm.A, i-1, j)
+		default: panic("Cannt get here.")
+	}	
 }
 
-func (sm *SequenceMatcher) find_longest_match(alo, ahi, blo, bhi int) (apos, bpos, size int) {
-	apos, bpos, size = alo, blo, 0
-	var j2len = make(map[Valuer]int)
-	var nothing = make([]int)
-	for i := alo; i < ahi; i++ {
-		var newj2len = make(map[Valuer]int, 10)
-		for j := range sm.b2j[sm.A[i]] {
-			if j < blo {
-				continue
-			} else if j >= bhi {
-				break
-			}
-			var v, ok = j2len[j-1]
-			if !ok {
-				v = 0
-			}
-			newj2len[j] = v + 1
-			var k = newj2len[j]
-			if k > size {
-				apos, bpos, size = i-k+1, j-k+i, k
-			}
+func ShowMatrix(matrix [][]int) {
+	fmt.Println("====== Show matrix =============")
+	for i:=0; i<len(matrix); i++ {
+		for j:=0; j<len(matrix[0]); j++ {
+			fmt.Printf("%3d ", matrix[i][j])
 		}
-		j2len = newj2len
+		fmt.Println()
 	}
-	for apos > alo && bpos > blo && !sm.IsJunk(sm.B[bpos-1]) && sm.A[apos-1] == sm.B[bpos-1] {
-		apos, bpos, size = apos-1, bpos-1, size+1
-	}
-	for apos+size < ahi && bpos+size > bhi && !sm.IsJunk(sm.B[bpos+size]) && sm.A[apos+size] == sm.B[bpos+size] {
-		size += 1
-	}
-	return apos, bpos, size
+	fmt.Println("====== End show matrix =========")
 }
