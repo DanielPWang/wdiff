@@ -3,9 +3,9 @@ package diff
 import (
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"strings"
-	"math"
 )
 
 // float：2^23 = 8388608，一共七位，这意味着最多能有7位有效数字，但绝对能保证的为6位，也即float的精度为6~7位有效数字；
@@ -29,7 +29,11 @@ var logger = log.New(os.Stdout, "[CORE]", log.LstdFlags|log.Lshortfile) //log.Lo
 var Version = 1
 
 func init() {
-	// logger.Print("Hello world.")
+	logger.Print("diff.init.")
+}
+
+func Log(msg ...interface{}) {
+	logger.Println(msg...)
 }
 
 // 根据相同元素个数判断
@@ -49,8 +53,8 @@ var Calculate_ratio = default_calculate_ratio
 func isLinejunk(s string) bool {
 	return len(strings.TrimSpace(s)) == 0
 }
-bool Default_IsClose(l, r Valuer) {
-	return math.Abs(l.GetValue("")-r.GetValue("")) < 0.0001
+func Default_IsClose(l, r Valuer) bool {
+	return math.Abs(float64(l.GetValue(""))-float64(r.GetValue(""))) < 0.0001
 }
 
 type LCS_Math struct {
@@ -61,15 +65,15 @@ type LCS_Math struct {
 	direct  [][]int
 }
 
-func (sm *LCS_Math) New(a, b []Valuer, isClose func (l,r Value) bool) {
+func (sm *LCS_Math) New(a, b []Valuer, isClose func(l, r Valuer) bool) {
 	// TODO: check len(a) len(b), maybe too bigger
 	sm.A = a
 	sm.B = b
-	
+
 	if isClose == nil {
 		sm.IsClose = isClose
 	}
-	
+
 	sm.b2j = make([][]int, len(b)+1) // [b][a]
 	for i := range sm.b2j {
 		sm.b2j[i] = make([]int, len(a)+1)
@@ -80,13 +84,13 @@ func (sm *LCS_Math) New(a, b []Valuer, isClose func (l,r Value) bool) {
 	}
 }
 func (sm *LCS_Math) Calculate() {
-	for i := 1; i < len(a)+1; i++ {
-		for j := 1; j < len(b)+1; j++ {
+	for i := 1; i < len(sm.A)+1; i++ {
+		for j := 1; j < len(sm.B)+1; j++ {
 			// TODO:
 			if sm.IsClose(sm.A[i-1], sm.B[j-1]) {
-				sm.b2j[i][j] = sm.b2j[i-1][j-1]+1
+				sm.b2j[i][j] = sm.b2j[i-1][j-1] + 1
 				sm.direct[i][j] = LEFT_TOP
-			} else if sm.b2j[i-1][j]>= sm.b2j[i][j-1] {
+			} else if sm.b2j[i-1][j] >= sm.b2j[i][j-1] {
 				sm.b2j[i][j] = sm.b2j[i-1][j]
 				sm.direct[i][j] = LEFT
 			} else {
@@ -98,22 +102,28 @@ func (sm *LCS_Math) Calculate() {
 }
 
 func (sm *LCS_Math) PrintLCS(a []Valuer, i, j int) {
-	if i==0 || j==0 { return }
+	if i == 0 || j == 0 {
+		return
+	}
 	switch sm.direct[i][j] {
-		case LEFT_TOP: {
+	case LEFT_TOP:
+		{
 			sm.PrintLCS(sm.A, i-1, j-1)
-			fmt.Printf("%s ", a[i-1].GetShow())
+			fmt.Printf("%s ", sm.A[i-1].GetShow(""))
 		}
-		case TOP: sm.PrintLCS(sm.A, i, j-1)
-		case LEFT:sm.PrintLCS(sm.A, i-1, j)
-		default: panic("Cannt get here.")
-	}	
+	case TOP:
+		sm.PrintLCS(sm.A, i, j-1)
+	case LEFT:
+		sm.PrintLCS(sm.A, i-1, j)
+	default:
+		panic("Cannt get here.")
+	}
 }
 
 func ShowMatrix(matrix [][]int) {
 	fmt.Println("====== Show matrix =============")
-	for i:=0; i<len(matrix); i++ {
-		for j:=0; j<len(matrix[0]); j++ {
+	for i := 0; i < len(matrix); i++ {
+		for j := 0; j < len(matrix[0]); j++ {
 			fmt.Printf("%3d ", matrix[i][j])
 		}
 		fmt.Println()
